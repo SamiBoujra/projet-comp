@@ -1,0 +1,65 @@
+#### train.py
+```python
+import os
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+def load_data():
+    train_df = pd.read_csv('data/train.csv')
+    train_labels = train_df.pop('label').values
+    train_images = train_df.values / 255.0
+    train_images = train_images.reshape(-1, 28, 28, 1)
+    return train_images, train_labels
+
+def build_model():
+    model = keras.Sequential([
+        keras.Input(shape=(28, 28, 1)),
+        layers.RandomContrast(factor=0.5),
+        layers.RandomWidth(factor=0.15),
+        layers.RandomHeight(factor=0.15),
+        layers.RandomFlip(mode='horizontal'),
+        layers.Resizing(28, 28),
+        layers.Conv2D(32, (3, 3), activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        layers.Conv2D(64, (3, 3), activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        layers.Conv2D(128, (3, 3), activation='relu'),
+        layers.BatchNormalization(),
+        layers.MaxPooling2D((2, 2)),
+        layers.Dropout(0.25),
+        layers.Flatten(),
+        layers.Dense(128, activation='relu'),
+        layers.BatchNormalization(),
+        layers.Dropout(0.5),
+        layers.Dense(10, activation='softmax')
+    ])
+    return model
+
+def main():
+    train_images, train_labels = load_data()
+    train_images, val_images = train_images[:48000], train_images[48000:]
+    train_labels, val_labels = train_labels[:48000], train_labels[48000:]
+
+    train_dataset = tf.data.Dataset.from_tensor_slices((train_images, train_labels))
+    val_dataset = tf.data.Dataset.from_tensor_slices((val_images, val_labels))
+
+    train_dataset = train_dataset.shuffle(1000).batch(64).cache().prefetch(tf.data.AUTOTUNE)
+    val_dataset = val_dataset.batch(64).cache().prefetch(tf.data.AUTOTUNE)
+
+    model = build_model()
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    early_stopping = keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)
+    model.fit(train_dataset, validation_data=val_dataset, epochs=50, callbacks=[early_stopping])
+
+    model.save('models/model.h5')
+
+if __name__ == "__main__":
+    main()
